@@ -1,16 +1,53 @@
-import { Text, View, ScrollView } from "react-native";
+import { Text, View, ScrollView, Alert } from "react-native";
 import { Header } from "../components/header";
 import { HabitDay, day_size } from "../components/habitDay";
 import { generateDatesFromYearBeginning } from "../utils/generate-dates-from-year-beginning";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import dayjs from "dayjs";
+import { useCallback, useEffect, useState } from "react";
+import { api } from "../lib/axios";
+import { Loading } from "../components/loading";
 
 const weekDays = ["D", "S", "T", "Q", "Q", "S", "S"];
 const datesFromYearStart = generateDatesFromYearBeginning();
-
 const dayYearsFill = 365 - datesFromYearStart.length;
 
+type SummaryType = Array<{
+  amount: number;
+  completed: number;
+  date: Date;
+}>;
 export function Home() {
+  const { navigate } = useNavigation();
+  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<SummaryType | null>(null);
+
+  async function fetchData() {
+    try {
+      setLoading(true);
+      const response = await api.get("/summary");
+      console.log(response.data);
+      setSummary(response.data);
+    } catch (error) {
+      Alert.alert("Ops", "Não foi possível carregar hábitos");
+      console.log(error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [])
+  );
+
+  if (loading) {
+    return <Loading />;
+  }
+
   return (
-    <View className="flex-1 bg-background px-8 pt-16">
+    <View className="flex-1 px-8 pt-16 bg-background">
       <Header />
 
       <View className="flex-row mt-6 mb-2 ">
@@ -18,7 +55,7 @@ export function Home() {
           return (
             <Text
               key={i}
-              className="text-zinc-400 text-xl font-bold text-center mx-1 "
+              className="mx-1 text-xl font-bold text-center text-zinc-400 "
               style={{ width: day_size, height: day_size }}
             >
               {weekDay}
@@ -31,22 +68,38 @@ export function Home() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 50 }}
       >
-        <View className="flex-row flex-wrap  mt-6 ">
-          {datesFromYearStart.map((date, i) => {
-            return <HabitDay key={date.toISOString()} />;
-          })}
-
-          {dayYearsFill > 0 &&
-            Array.from({ length: dayYearsFill }).map((date, i) => {
+        {summary && (
+          <View className="flex-row flex-wrap mt-6 ">
+            {datesFromYearStart.map((date, i) => {
+              const dayWithHabits = summary.find((day) => {
+                return dayjs(date).isSame(day.date, "day");
+              });
+              console.log(dayWithHabits?.amount, dayWithHabits?.completed);
               return (
-                <View
+                <HabitDay
                   key={i}
-                  className="bg-zinc-900 rounded-lg border-2 m-1 border-zinc-800 opacity-40"
-                  style={{ width: day_size, height: day_size }}
-                ></View>
+                  date={date}
+                  amountOfHabits={dayWithHabits?.amount}
+                  amountCompleted={dayWithHabits?.completed}
+                  onPress={() =>
+                    navigate("habit", { date: date.toISOString() })
+                  }
+                />
               );
             })}
-        </View>
+
+            {dayYearsFill > 0 &&
+              Array.from({ length: dayYearsFill }).map((date, i) => {
+                return (
+                  <View
+                    key={i}
+                    className="m-1 border-2 rounded-lg bg-zinc-900 border-zinc-800 opacity-40"
+                    style={{ width: day_size, height: day_size }}
+                  ></View>
+                );
+              })}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
